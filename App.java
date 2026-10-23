@@ -1,5 +1,7 @@
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 public class App {
     public static void main(String[] args) throws Exception {
@@ -8,7 +10,12 @@ public class App {
             String path = exchange.getRequestURI().getPath();
             String message;
             if (path.equals("/hello")) {
-                message = "こんにちは！";
+                String query = exchange.getRequestURI().getRawQuery();
+                System.out.println("query = " + query);
+                String name = query == null
+                        ? "ゲスト"
+                        : URLDecoder.decode(query.substring(5), StandardCharsets.UTF_8);
+                message = "こんにちは、" + name + "さん！";
             } else if (path.equals("/bye")) {
                 message = "さようなら！";
             } else if (path.equals("/moon")) {
