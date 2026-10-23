@@ -14,7 +14,7 @@ public class App {
             } else {
                 message = "ページが見つかりません";
             }
-            exchange.getResponseHeaders().set("Content -Type", "text/plain; charset=UTF-8");
+            exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
             byte[] body = message.getBytes("UTF-8");
             exchange.sendResponseHeaders(200, body.length);
             exchange.getResponseBody().write(body);
