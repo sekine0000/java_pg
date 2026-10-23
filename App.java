@@ -11,6 +11,8 @@ public class App {
                 message = "こんにちは！";
             } else if (path.equals("/bye")) {
                 message = "さようなら！";
+            } else if (path.equals("/moon")) {
+                message = "月が綺麗ですね！";
             } else {
                 message = "ページが見つかりません";
             }
