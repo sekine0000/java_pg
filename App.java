@@ -52,7 +52,7 @@ public class App {
                 String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 String value = body.substring(5);
                 String title = URLDecoder.decode(value, StandardCharsets.UTF_8); // ★変更
-                if (!title.isEmpty()) { // ★変更
+                if (!title.strip().isEmpty()) { // ★変更
                     todos.add(new Todo(nextId, title)); // ★変更
                     nextId++; // ★変更
                 }
@@ -60,15 +60,46 @@ public class App {
                 exchange.sendResponseHeaders(303, -1);
                 exchange.close();
                 return;
+            } else if (path.equals("/done") && method.equals("GET")) { // ★追加
+                String query = exchange.getRequestURI().getQuery(); // ★追加
+                if (query != null && query.startsWith("id=") && query.length() > 3) { // ★追加
+                    try { // ★追加
+                        int id = Integer.parseInt(query.substring(3)); // ★追加
+                        for (Todo todo : todos) { // ★追加
+                            if (todo.getId() == id) { // ★追加
+                                todo.setDone(!todo.isDone()); // ★変更
+                                break; // ★追加
+                            } // ★追加
+                        } // ★追加
+                    } catch (NumberFormatException e) { // ★追加
+                    } // ★追加
+                } // ★追加
+                exchange.getResponseHeaders().set("Location", "/"); // ★追加
+                exchange.sendResponseHeaders(303, -1); // ★追加
+                exchange.close(); // ★追加
+                return; // ★追加
+            } else if (path.equals("/delete") && method.equals("GET")) { // ★追加
+                String query = exchange.getRequestURI().getQuery(); // ★追加
+                if (query != null && query.startsWith("id=") && query.length() > 3) { // ★追加
+                    try { // ★追加
+                        int id = Integer.parseInt(query.substring(3)); // ★追加
+                        todos.removeIf(todo -> todo.getId() == id); // ★修正
+                    } catch (NumberFormatException e) { // ★追加
+                    } // ★追加
+                } // ★追加
+                exchange.getResponseHeaders().set("Location", "/"); // ★追加
+                exchange.sendResponseHeaders(303, -1); // ★追加
+                exchange.close(); // ★追加
+                return; // ★追加
             } else if (path.equals("/")) {
                 String html = "<form method='post' action='/add'><input name='todo'><button>追加</button></form>";
                 html += "<ul>";
                 for (Todo todo : todos) { // ★変更
-                    String mark = ""; // ★変更
-                    if (todo.isDone()) { // ★変更
-                        mark = " ✔"; // ★変更
-                    }
-                    html += "<li>" + todo.getTitle() + mark + "</li>"; // ★変更
+                    String titleStyle = todo.isDone()
+                            ? " style='color: #999; text-decoration: line-through;'"
+                            : "";
+                    html += "<li><span" + titleStyle + ">" + todo.getTitle() + "</span> <a href='/done?id=" + todo.getId()
+                            + "'>完了</a> <a href='/delete?id=" + todo.getId() + "'>削除</a></li>"; // ★追加
                 }
                 html += "</ul>";
                 message = html;
