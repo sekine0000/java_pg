@@ -91,23 +91,42 @@ public class App {
                 exchange.sendResponseHeaders(303, -1); // ★追加
                 exchange.close(); // ★追加
                 return; // ★追加
+            } else if (path.equals("/delete-completed") && method.equals("GET")) {
+                for (int i = todos.size() - 1; i >= 0; i--) {
+                    if (todos.get(i).isDone()) {
+                        todos.remove(i);
+                    }
+                }
+                exchange.getResponseHeaders().set("Location", "/");
+                exchange.sendResponseHeaders(303, -1);
+                exchange.close();
+                return;
             } else if (path.equals("/")) {
                 String html = "<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'>"
                         + "<title>やることリスト</title>"
-                        + "<style>body { max-width: 640px; margin: 32px auto; padding: 0 16px; font-size: 16px; line-height: 1.6; } input, button { font-size: inherit; }</style>"
+                        + "<style>body { max-width: 640px; margin: 32px auto; padding: 0 16px; font-size: 16px; line-height: 1.6; } input, button { font-size: inherit; } .status { display: flex; align-items: center; gap: 12px; }</style>"
                         + "</head><body><h1>やることリスト</h1>"
                         + "<form method='post' action='/add'><input name='todo'><button>追加</button></form>";
                 int remainingCount = 0;
+                boolean hasCompleted = false;
                 for (Todo todo : todos) {
                     if (todo.isDone() == false) {
                         remainingCount++;
+                    } else {
+                        hasCompleted = true;
                     }
                 }
+                html += "<div class='status'><p>";
                 if (remainingCount == 0) {
-                    html += "<p>ぜんぶ完了</p>";
+                    html += "全部完了";
                 } else {
-                    html += "<p>あと" + remainingCount + "件</p>";
+                    html += "あと" + remainingCount + "件";
                 }
+                html += "</p>";
+                if (hasCompleted) {
+                    html += "<a href='/delete-completed'>完了済みをすべて削除</a>";
+                }
+                html += "</div>";
                 if (todos.isEmpty()) {
                     html += "<p>なにもありません</p>";
                 } else {
