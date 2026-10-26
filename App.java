@@ -92,16 +92,34 @@ public class App {
                 exchange.close(); // ★追加
                 return; // ★追加
             } else if (path.equals("/")) {
-                String html = "<form method='post' action='/add'><input name='todo'><button>追加</button></form>";
+                String html = "<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'>"
+                        + "<title>わたしのTodoリスト</title>"
+                        + "<style>body { max-width: 640px; margin: 32px auto; padding: 0 16px; font-size: 16px; line-height: 1.6; } input, button { font-size: inherit; }</style>"
+                        + "</head><body><h1>わたしのTodoリスト</h1>"
+                        + "<form method='post' action='/add'><input name='todo'><button>追加</button></form>";
+                int remainingCount = 0;
+                for (Todo todo : todos) {
+                    if (todo.isDone() == false) {
+                        remainingCount++;
+                    }
+                }
+                if (remainingCount == 0) {
+                    html += "<p>ぜんぶ完了</p>";
+                }
+                html += "<p>あと" + remainingCount + "件</p>";
                 html += "<ul>";
+                if (todos.isEmpty()) {
+                    html += "<li>なにもありません</li>";
+                }
                 for (Todo todo : todos) { // ★変更
                     String titleStyle = todo.isDone()
                             ? " style='color: #999; text-decoration: line-through;'"
                             : "";
-                    html += "<li><span" + titleStyle + ">" + todo.getTitle() + "</span> <a href='/done?id=" + todo.getId()
+                    html += "<li><span" + titleStyle + ">" + todo.getTitle() + "</span> <a href='/done?id="
+                            + todo.getId()
                             + "'>完了</a> <a href='/delete?id=" + todo.getId() + "'>削除</a></li>"; // ★追加
                 }
-                html += "</ul>";
+                html += "</ul></body></html>";
                 message = html;
                 exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
             } else {
