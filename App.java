@@ -93,9 +93,9 @@ public class App {
                 return; // ★追加
             } else if (path.equals("/")) {
                 String html = "<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'>"
-                        + "<title>わたしのTodoリスト</title>"
+                        + "<title>やることリスト</title>"
                         + "<style>body { max-width: 640px; margin: 32px auto; padding: 0 16px; font-size: 16px; line-height: 1.6; } input, button { font-size: inherit; }</style>"
-                        + "</head><body><h1>わたしのTodoリスト</h1>"
+                        + "</head><body><h1>やることリスト</h1>"
                         + "<form method='post' action='/add'><input name='todo'><button>追加</button></form>";
                 int remainingCount = 0;
                 for (Todo todo : todos) {
