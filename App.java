@@ -5,10 +5,44 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+class Todo { // ★変更
+    private final int id; // ★変更
+    private final String title; // ★変更
+    private boolean done; // ★変更
+
+    Todo(int id, String title) { // ★変更
+        this.id = id; // ★変更
+        this.title = title; // ★変更
+        this.done = false; // ★変更
+    }
+
+    int getId() { // ★変更
+        return id; // ★変更
+    }
+
+    String getTitle() { // ★変更
+        return title; // ★変更
+    }
+
+    boolean isDone() { // ★変更
+        return done; // ★変更
+    }
+
+    void setDone(boolean done) { // ★変更
+        this.done = done; // ★変更
+    }
+}
+
 public class App {
+    static List<Todo> todos = new ArrayList<>(); // ★変更
+    static int nextId = 1; // ★変更
+
     public static void main(String[] args) throws Exception {
+        todos.add(new Todo(nextId++, "牛乳を買う")); // ★変更
+        Todo egg = new Todo(nextId++, "卵を買う"); // ★変更
+        egg.setDone(true); // ★変更
+        todos.add(egg); // ★変更
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
-        List<String> todos = new ArrayList<>();
         server.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getPath();
             String method = exchange.getRequestMethod();
@@ -17,9 +51,10 @@ public class App {
             if (path.equals("/add") && method.equals("POST")) {
                 String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 String value = body.substring(5);
-                String todo = URLDecoder.decode(value, StandardCharsets.UTF_8);
-                if (!todo.isEmpty()) {
-                    todos.add(todo);
+                String title = URLDecoder.decode(value, StandardCharsets.UTF_8); // ★変更
+                if (!title.isEmpty()) { // ★変更
+                    todos.add(new Todo(nextId, title)); // ★変更
+                    nextId++; // ★変更
                 }
                 exchange.getResponseHeaders().set("Location", "/");
                 exchange.sendResponseHeaders(303, -1);
@@ -28,25 +63,18 @@ public class App {
             } else if (path.equals("/")) {
                 String html = "<form method='post' action='/add'><input name='todo'><button>追加</button></form>";
                 html += "<ul>";
-                for (String todo : todos) {
-                    html += "<li>" + todo + "</li>";
+                for (Todo todo : todos) { // ★変更
+                    String mark = ""; // ★変更
+                    if (todo.isDone()) { // ★変更
+                        mark = " ✔"; // ★変更
+                    }
+                    html += "<li>" + todo.getTitle() + mark + "</li>"; // ★変更
                 }
                 html += "</ul>";
                 message = html;
                 exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
-            } else if (path.equals("/hello")) {
-                String query = exchange.getRequestURI().getRawQuery();
-                System.out.println("query = " + query);
-                String name = query == null
-                        ? "ゲスト"
-                        : URLDecoder.decode(query.substring(5), StandardCharsets.UTF_8);
-                message = "こんにちは、" + name + "さん！";
-            } else if (path.equals("/bye")) {
-                message = "さようなら！";
-            } else if (path.equals("/moon")) {
-                message = "月が綺麗ですね！";
             } else {
-                message = "ページが見つかりません";
+                message = "ページが見つかりません"; // ★変更
             }
             byte[] body = message.getBytes("UTF-8");
             exchange.sendResponseHeaders(200, body.length);
