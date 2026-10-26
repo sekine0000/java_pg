@@ -104,9 +104,22 @@ public class App {
             } else if (path.equals("/")) {
                 String html = "<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'>"
                         + "<title>やることリスト</title>"
-                        + "<style>body { max-width: 640px; margin: 32px auto; padding: 0 16px; font-size: 16px; line-height: 1.6; } input, button { font-size: inherit; } .status { display: flex; align-items: center; gap: 12px; }</style>"
+                        + "<style>"
+                        + ":root { color-scheme: light; } "
+                        + "body { max-width: 640px; margin: 32px auto; padding: 0 16px; font-size: 16px; line-height: 1.6; background: #fff; color: #222; transition: background .2s, color .2s; } "
+                        + "body.dark { color-scheme: dark; background: #181a1b; color: #eee; } "
+                        + "input, button { font-size: inherit; } "
+                        + "body.dark input, body.dark button { background: #2b2f31; color: #eee; border-color: #777; } "
+                        + "a { color: #075dcc; } body.dark a { color: #8ab4f8; } "
+                        + ".header { display: flex; justify-content: space-between; align-items: center; gap: 16px; } "
+                        + ".theme-toggle { cursor: pointer; white-space: nowrap; padding: 6px 10px; } "
+                        + ".light-label { display: none; } body.dark .dark-label { display: none; } body.dark .light-label { display: inline; } "
+                        + ".status { display: flex; align-items: center; gap: 12px; }"
+                        + "</style>"
                         + "</head><body><h1>やることリスト</h1>"
                         + "<form method='post' action='/add'><input name='todo'><button>追加</button></form>";
+                html = html.replace("<body><h1>", "<body><div class='header'><h1>");
+                html = html.replace("</h1><form", "</h1><button class='theme-toggle' type='button' aria-label='theme toggle'><span class='dark-label'>&#9790; &#12480;&#12540;&#12463;&#12514;&#12540;&#12489;</span><span class='light-label'>&#9728; &#12521;&#12452;&#12488;&#12514;&#12540;&#12489;</span></button></div><form");
                 int remainingCount = 0;
                 boolean hasCompleted = false;
                 for (Todo todo : todos) {
@@ -141,7 +154,14 @@ public class App {
                     }
                     html += "</ul>";
                 }
-                html += "</body></html>";
+                html += "<script>"
+                        + "const savedTheme = localStorage.getItem('theme');"
+                        + "if (savedTheme === 'dark') document.body.classList.add('dark');"
+                        + "document.querySelector('.theme-toggle').addEventListener('click', () => {"
+                        + "document.body.classList.toggle('dark');"
+                        + "localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');"
+                        + "});"
+                        + "</script></body></html>";
                 message = html;
                 exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
             } else {
