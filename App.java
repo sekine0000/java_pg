@@ -105,21 +105,24 @@ public class App {
                 }
                 if (remainingCount == 0) {
                     html += "<p>ぜんぶ完了</p>";
+                } else {
+                    html += "<p>あと" + remainingCount + "件</p>";
                 }
-                html += "<p>あと" + remainingCount + "件</p>";
-                html += "<ul>";
                 if (todos.isEmpty()) {
-                    html += "<li>なにもありません</li>";
+                    html += "<p>なにもありません</p>";
+                } else {
+                    html += "<ul>";
+                    for (Todo todo : todos) { // ★変更
+                        String titleStyle = todo.isDone()
+                                ? " style='color: #999; text-decoration: line-through;'"
+                                : "";
+                        html += "<li><span" + titleStyle + ">" + todo.getTitle() + "</span> <a href='/done?id="
+                                + todo.getId()
+                                + "'>完了</a> <a href='/delete?id=" + todo.getId() + "'>削除</a></li>"; // ★追加
+                    }
+                    html += "</ul>";
                 }
-                for (Todo todo : todos) { // ★変更
-                    String titleStyle = todo.isDone()
-                            ? " style='color: #999; text-decoration: line-through;'"
-                            : "";
-                    html += "<li><span" + titleStyle + ">" + todo.getTitle() + "</span> <a href='/done?id="
-                            + todo.getId()
-                            + "'>完了</a> <a href='/delete?id=" + todo.getId() + "'>削除</a></li>"; // ★追加
-                }
-                html += "</ul></body></html>";
+                html += "</body></html>";
                 message = html;
                 exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
             } else {
