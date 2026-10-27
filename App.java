@@ -133,6 +133,51 @@ public class App {
                 .replace("\"", "&quot;").replace("'", "&#39;");
     }
 
+    private static void sendJson(HttpExchange exchange, int status, String json) throws IOException { // JSONレスポンスを送信する
+        byte[] body = json.getBytes(StandardCharsets.UTF_8); // JSONをUTF-8のバイト列に変換する
+        exchange.getResponseHeaders().set("Content-Type", "application/json"); // charsetなしのJSON形式を指定する
+        exchange.sendResponseHeaders(status, body.length); // ステータスと本文サイズを送信する
+        exchange.getResponseBody().write(body); // JSON本文を書き込む
+        exchange.close(); // 通信を終了する
+    } // JSON送信処理を終了する
+
+    private static String todosToJson(List<SqliteTodo> todos) { // Todo一覧をJSON配列へ変換する
+        StringBuilder json = new StringBuilder("["); // JSON配列を開始する
+        for (int i = 0; i < todos.size(); i++) { // 全Todoを順番に処理する
+            if (i > 0) json.append(','); // 二件目以降の前に区切りを追加する
+            SqliteTodo todo = todos.get(i); // 現在のTodoを取得する
+            json.append("{\"title\":\""); // titleプロパティを開始する
+            json.append(escapeJson(todo.getTitle())); // タイトルをエスケープして追加する
+            json.append("\",\"done\":"); // doneプロパティを開始する
+            json.append(todo.isDone()); // 完了状態を真偽値として追加する
+            json.append('}'); // Todoオブジェクトを終了する
+        } // 全Todoの処理を終了する
+        return json.append(']').toString(); // JSON配列を閉じて返す
+    } // Todo一覧の変換処理を終了する
+
+    private static String escapeJson(String value) { // JSON文字列用にタイトルをエスケープする
+        StringBuilder escaped = new StringBuilder(); // エスケープ後の文字列を保持する
+        for (int i = 0; i < value.length(); i++) { // タイトルを一文字ずつ処理する
+            char c = value.charAt(i); // 現在の文字を取得する
+            switch (c) { // エスケープ方法を文字ごとに選ぶ
+                case '"': escaped.append("\\\""); break; // 二重引用符をエスケープする
+                case '\\': escaped.append("\\\\"); break; // バックスラッシュをエスケープする
+                case '\b': escaped.append("\\b"); break; // バックスペースをエスケープする
+                case '\f': escaped.append("\\f"); break; // フォームフィードをエスケープする
+                case '\n': escaped.append("\\n"); break; // 改行をエスケープする
+                case '\r': escaped.append("\\r"); break; // 復帰をエスケープする
+                case '\t': escaped.append("\\t"); break; // タブをエスケープする
+                default: // その他の文字を処理する
+                    if (c < 0x20) { // JSONで直接使えない制御文字を判定する
+                        escaped.append(String.format("\\u%04x", (int) c)); // Unicodeエスケープへ変換する
+                    } else { // 通常の文字を処理する
+                        escaped.append(c); // 文字をそのまま追加する
+                    } // 制御文字の判定を終了する
+            } // 文字ごとの分岐を終了する
+        } // 一文字ずつの処理を終了する
+        return escaped.toString(); // エスケープ済み文字列を返す
+    } // JSON文字列のエスケープ処理を終了する
+
     private static String renderPage() throws SQLException { // ★ 表示時にDBから読む
         List<SqliteTodo> todos = findAll(); // ★
         int remainingCount = 0;
@@ -176,6 +221,20 @@ public class App {
     public static void main(String[] args) throws Exception {
         createTable(); // ★ 起動時にテーブルを作成
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
+        server.createContext("/api/todos", exchange -> { // Todo一覧APIを登録する
+            if (!exchange.getRequestMethod().equals("GET")) { // GET以外のリクエストを拒否する
+                exchange.getResponseHeaders().set("Allow", "GET"); // 利用可能なメソッドを通知する
+                exchange.sendResponseHeaders(405, -1); // 本文なしで405を返す
+                exchange.close(); // 通信を終了する
+                return; // 処理を打ち切る
+            } // メソッド判定を終了する
+            try { // データベース処理の例外を捕捉する
+                sendJson(exchange, 200, todosToJson(findAll())); // 全TodoをJSONで返す
+            } catch (SQLException e) { // データベースエラーを処理する
+                e.printStackTrace(); // エラー内容を標準エラーへ出力する
+                sendJson(exchange, 500, "{\"error\":\"データベースエラー\"}"); // JSON形式で500を返す
+            } // 例外処理を終了する
+        }); // Todo一覧APIの登録を終了する
         server.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getPath();
             String method = exchange.getRequestMethod();
