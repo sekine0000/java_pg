@@ -1,19 +1,27 @@
+import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection; // ★ SQLite保存用に変更
+import java.sql.DriverManager; // ★ SQLite保存用に変更
+import java.sql.PreparedStatement; // ★ SQLite保存用に変更
+import java.sql.ResultSet; // ★ SQLite保存用に変更
+import java.sql.SQLException; // ★ SQLite保存用に変更
+import java.sql.Statement; // ★ SQLite保存用に変更
 import java.util.ArrayList;
 import java.util.List;
 
-class Todo {
+class SqliteTodo { // ★ 既存のMain.javaにあるTodoクラスとの名前衝突を回避
     private final int id;
     private final String title;
-    private boolean done;
+    private final boolean done;
 
-    Todo(int id, String title) {
+    SqliteTodo(int id, String title, boolean done) { // ★ DBから完了状態も復元
         this.id = id;
         this.title = title;
-        this.done = false;
+        this.done = done; // ★
     }
 
     int getId() {
@@ -27,150 +35,180 @@ class Todo {
     boolean isDone() {
         return done;
     }
-
-    void setDone(boolean done) {
-        this.done = done;
-    }
 }
 
 public class App {
-    static List<Todo> todos = new ArrayList<>();
-    static int nextId = 1;
+    private static final String DB_URL = "jdbc:sqlite:todos.db"; // ★ CSVからSQLiteへ変更
+
+    private static Connection connect() throws SQLException { // ★
+        return DriverManager.getConnection(DB_URL); // ★
+    }
+
+    private static void createTable() throws SQLException { // ★
+        String sql = "CREATE TABLE IF NOT EXISTS todos (" // ★
+                + "id INTEGER PRIMARY KEY, title TEXT, done INTEGER)"; // ★
+        try (Connection connection = connect(); // ★
+                Statement statement = connection.createStatement()) { // ★
+            statement.execute(sql); // ★
+        }
+    }
+
+    private static List<SqliteTodo> findAll() throws SQLException { // ★ SELECTで一覧を取得
+        List<SqliteTodo> todos = new ArrayList<>(); // ★
+        String sql = "SELECT id, title, done FROM todos ORDER BY id"; // ★
+        try (Connection connection = connect(); // ★
+                Statement statement = connection.createStatement(); // ★
+                ResultSet results = statement.executeQuery(sql)) { // ★
+            while (results.next()) { // ★
+                todos.add(new SqliteTodo(results.getInt("id"), results.getString("title"), // ★
+                        results.getInt("done") != 0)); // ★
+            }
+        }
+        return todos; // ★
+    }
+
+    private static void add(String title) throws SQLException { // ★ INSERTに変更
+        String sql = "INSERT INTO todos (title, done) VALUES (?, 0)"; // ★
+        try (Connection connection = connect(); // ★
+                PreparedStatement statement = connection.prepareStatement(sql)) { // ★
+            statement.setString(1, title); // ★
+            statement.executeUpdate(); // ★
+        }
+    }
+
+    private static void toggleDone(int id) throws SQLException { // ★ UPDATEに変更
+        String sql = "UPDATE todos SET done = CASE done WHEN 0 THEN 1 ELSE 0 END WHERE id = ?"; // ★
+        try (Connection connection = connect(); // ★
+                PreparedStatement statement = connection.prepareStatement(sql)) { // ★
+            statement.setInt(1, id); // ★
+            statement.executeUpdate(); // ★
+        }
+    }
+
+    private static void delete(int id) throws SQLException { // ★ DELETEに変更
+        String sql = "DELETE FROM todos WHERE id = ?"; // ★
+        try (Connection connection = connect(); // ★
+                PreparedStatement statement = connection.prepareStatement(sql)) { // ★
+            statement.setInt(1, id); // ★
+            statement.executeUpdate(); // ★
+        }
+    }
+
+    private static void deleteCompleted() throws SQLException { // ★ 完了済みもDELETE
+        String sql = "DELETE FROM todos WHERE done <> 0"; // ★
+        try (Connection connection = connect(); // ★
+                PreparedStatement statement = connection.prepareStatement(sql)) { // ★
+            statement.executeUpdate(); // ★
+        }
+    }
+
+    private static Integer queryId(HttpExchange exchange) {
+        String query = exchange.getRequestURI().getQuery();
+        if (query == null || !query.startsWith("id=") || query.length() <= 3)
+            return null;
+        try {
+            return Integer.parseInt(query.substring(3));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static void redirect(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().set("Location", "/");
+        exchange.sendResponseHeaders(303, -1);
+        exchange.close();
+    }
+
+    private static void send(HttpExchange exchange, int status, String type, String message)
+            throws IOException {
+        byte[] body = message.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", type + "; charset=UTF-8");
+        exchange.sendResponseHeaders(status, body.length);
+        exchange.getResponseBody().write(body);
+        exchange.close();
+    }
+
+    private static String escapeHtml(String value) {
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&#39;");
+    }
+
+    private static String renderPage() throws SQLException { // ★ 表示時にDBから読む
+        List<SqliteTodo> todos = findAll(); // ★
+        int remainingCount = 0;
+        boolean hasCompleted = false;
+        for (SqliteTodo todo : todos) {
+            if (todo.isDone())
+                hasCompleted = true;
+            else
+                remainingCount++;
+        }
+
+        StringBuilder html = new StringBuilder();
+        html.append("<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'>")
+                .append("<title>Todoリスト</title><style>")
+                .append("body{max-width:640px;margin:32px auto;padding:0 16px;font-size:16px;line-height:1.6}")
+                .append("input,button{font-size:inherit}.status{display:flex;align-items:center;gap:12px}")
+                .append("</style></head><body><h1>Todoリスト</h1>")
+                .append("<form method='post' action='/add'><input name='todo' required>")
+                .append("<button>追加</button></form><div class='status'><p>")
+                .append(remainingCount == 0 ? "全部完了" : "あと" + remainingCount + "件")
+                .append("</p>");
+        if (hasCompleted)
+            html.append("<a href='/delete-completed'>完了済みをすべて削除</a>");
+        html.append("</div>");
+        if (todos.isEmpty()) {
+            html.append("<p>なにもありません</p>");
+        } else {
+            html.append("<ul>");
+            for (SqliteTodo todo : todos) {
+                String style = todo.isDone() ? " style='color:#999;text-decoration:line-through'" : "";
+                html.append("<li><span").append(style).append(">")
+                        .append(escapeHtml(todo.getTitle())).append("</span> ")
+                        .append("<a href='/done?id=").append(todo.getId()).append("'>完了</a> ")
+                        .append("<a href='/delete?id=").append(todo.getId()).append("'>削除</a></li>");
+            }
+            html.append("</ul>");
+        }
+        return html.append("</body></html>").toString();
+    }
 
     public static void main(String[] args) throws Exception {
-        todos.add(new Todo(nextId++, "牛乳を買う"));
-        Todo egg = new Todo(nextId++, "卵を買う");
-        egg.setDone(true);
-        todos.add(egg);
+        createTable(); // ★ 起動時にテーブルを作成
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
         server.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getPath();
             String method = exchange.getRequestMethod();
-            String message;
-            exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
-            if (path.equals("/add") && method.equals("POST")) {
-                String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-                String value = body.substring(5);
-                String title = URLDecoder.decode(value, StandardCharsets.UTF_8);
-                if (!title.strip().isEmpty()) {
-                    todos.add(new Todo(nextId, title));
-                    nextId++;
-                }
-                exchange.getResponseHeaders().set("Location", "/");
-                exchange.sendResponseHeaders(303, -1);
-                exchange.close();
-                return;
-            } else if (path.equals("/done") && method.equals("GET")) {
-                String query = exchange.getRequestURI().getQuery();
-                if (query != null && query.startsWith("id=") && query.length() > 3) {
-                    try {
-                        int id = Integer.parseInt(query.substring(3));
-                        for (Todo todo : todos) {
-                            if (todo.getId() == id) {
-                                todo.setDone(!todo.isDone());
-                                break;
-                            }
-                        }
-                    } catch (NumberFormatException e) {
-                    }
-                }
-                exchange.getResponseHeaders().set("Location", "/");
-                exchange.sendResponseHeaders(303, -1);
-                exchange.close();
-                return;
-            } else if (path.equals("/delete") && method.equals("GET")) {
-                String query = exchange.getRequestURI().getQuery();
-                if (query != null && query.startsWith("id=") && query.length() > 3) {
-                    try {
-                        int id = Integer.parseInt(query.substring(3));
-                        todos.removeIf(todo -> todo.getId() == id);
-                    } catch (NumberFormatException e) {
-                    }
-                }
-                exchange.getResponseHeaders().set("Location", "/");
-                exchange.sendResponseHeaders(303, -1);
-                exchange.close();
-                return;
-            } else if (path.equals("/delete-completed") && method.equals("GET")) {
-                for (int i = todos.size() - 1; i >= 0; i--) {
-                    if (todos.get(i).isDone()) {
-                        todos.remove(i);
-                    }
-                }
-                exchange.getResponseHeaders().set("Location", "/");
-                exchange.sendResponseHeaders(303, -1);
-                exchange.close();
-                return;
-            } else if (path.equals("/")) {
-                String html = "<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'>"
-                        + "<title>やることリスト</title>"
-                        + "<style>"
-                        + ":root { color-scheme: light; } "
-                        + "body { max-width: 640px; margin: 32px auto; padding: 0 16px; font-size: 16px; line-height: 1.6; background: #fff; color: #222; transition: background .2s, color .2s; } "
-                        + "body.dark { color-scheme: dark; background: #181a1b; color: #eee; } "
-                        + "input, button { font-size: inherit; } "
-                        + "body.dark input, body.dark button { background: #2b2f31; color: #eee; border-color: #777; } "
-                        + "a { color: #075dcc; } body.dark a { color: #8ab4f8; } "
-                        + ".header { display: flex; justify-content: space-between; align-items: center; gap: 16px; } "
-                        + ".theme-toggle { cursor: pointer; white-space: nowrap; padding: 6px 10px; } "
-                        + ".light-label { display: none; } body.dark .dark-label { display: none; } body.dark .light-label { display: inline; } "
-                        + ".status { display: flex; align-items: center; gap: 12px; }"
-                        + "</style>"
-                        + "</head><body><h1>やることリスト</h1>"
-                        + "<form method='post' action='/add'><input name='todo'><button>追加</button></form>";
-                html = html.replace("<body><h1>", "<body><div class='header'><h1>");
-                html = html.replace("</h1><form", "</h1><button class='theme-toggle' type='button' aria-label='theme toggle'><span class='dark-label'>&#9790; &#12480;&#12540;&#12463;&#12514;&#12540;&#12489;</span><span class='light-label'>&#9728; &#12521;&#12452;&#12488;&#12514;&#12540;&#12489;</span></button></div><form");
-                int remainingCount = 0;
-                boolean hasCompleted = false;
-                for (Todo todo : todos) {
-                    if (todo.isDone() == false) {
-                        remainingCount++;
-                    } else {
-                        hasCompleted = true;
-                    }
-                }
-                html += "<div class='status'><p>";
-                if (remainingCount == 0) {
-                    html += "全部完了";
+            try {
+                if (path.equals("/add") && method.equals("POST")) {
+                    String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                    String value = body.startsWith("todo=") ? body.substring(5) : "";
+                    String title = URLDecoder.decode(value, StandardCharsets.UTF_8);
+                    if (!title.strip().isEmpty())
+                        add(title); // ★ INSERT
+                    redirect(exchange);
+                } else if (path.equals("/done") && method.equals("GET")) {
+                    Integer id = queryId(exchange);
+                    if (id != null)
+                        toggleDone(id); // ★ UPDATE
+                    redirect(exchange);
+                } else if (path.equals("/delete") && method.equals("GET")) {
+                    Integer id = queryId(exchange);
+                    if (id != null)
+                        delete(id); // ★ DELETE
+                    redirect(exchange);
+                } else if (path.equals("/delete-completed") && method.equals("GET")) {
+                    deleteCompleted(); // ★ DELETE
+                    redirect(exchange);
+                } else if (path.equals("/") && method.equals("GET")) {
+                    send(exchange, 200, "text/html", renderPage()); // ★ SELECT結果を表示
                 } else {
-                    html += "あと" + remainingCount + "件";
+                    send(exchange, 404, "text/plain", "ページが見つかりません");
                 }
-                html += "</p>";
-                if (hasCompleted) {
-                    html += "<a href='/delete-completed'>完了済みをすべて削除</a>";
-                }
-                html += "</div>";
-                if (todos.isEmpty()) {
-                    html += "<p>なにもありません</p>";
-                } else {
-                    html += "<ul>";
-                    for (Todo todo : todos) {
-                        String titleStyle = todo.isDone()
-                                ? " style='color: #999; text-decoration: line-through;'"
-                                : "";
-                        html += "<li><span" + titleStyle + ">" + todo.getTitle() + "</span> <a href='/done?id="
-                                + todo.getId()
-                                + "'>完了</a> <a href='/delete?id=" + todo.getId() + "'>削除</a></li>";
-                    }
-                    html += "</ul>";
-                }
-                html += "<script>"
-                        + "const savedTheme = localStorage.getItem('theme');"
-                        + "if (savedTheme === 'dark') document.body.classList.add('dark');"
-                        + "document.querySelector('.theme-toggle').addEventListener('click', () => {"
-                        + "document.body.classList.toggle('dark');"
-                        + "localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');"
-                        + "});"
-                        + "</script></body></html>";
-                message = html;
-                exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
-            } else {
-                message = "ページが見つかりません";
+            } catch (SQLException e) { // ★ DBエラーをHTTP 500として処理
+                e.printStackTrace(); // ★
+                send(exchange, 500, "text/plain", "データベースエラーが発生しました"); // ★
             }
-            byte[] body = message.getBytes("UTF-8");
-            exchange.sendResponseHeaders(200, body.length);
-            exchange.getResponseBody().write(body);
-            exchange.getResponseBody().close();
         });
         server.start();
         System.out.println("サーバー起動: http://localhost:8080 （止めるときは Ctrl+C）");
